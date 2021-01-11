@@ -1,6 +1,8 @@
+// MapLibre GL JS読み込み
+import { Map, NavigationControl } from "maplibre-gl";
 
 // MIERUNE MONO読み込み
-const map = new mapboxgl.Map({
+const map = new Map({
     container: "map",
     style: {
         "version": 8,
@@ -25,4 +27,4 @@ const map = new mapboxgl.Map({
 });
 
 // コントロール関係表示
-map.addControl(new mapboxgl.NavigationControl());
+map.addControl(new NavigationControl());
