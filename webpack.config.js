@@ -29,11 +29,6 @@ module.exports = {
             }
         ]
     },
-    plugins: [
-        new webpack.ProvidePlugin({
-            mapboxgl: 'mapbox-gl'
-        })
-    ],
     devServer: {
         contentBase: __dirname + '/dist',
         publicPath: '/',
