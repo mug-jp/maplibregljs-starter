@@ -1,11 +1,11 @@
-const webpack = require("webpack");
+const webpack = require('webpack');
 
 module.exports = {
     mode: 'production',
     entry: './_resouce/main.js',
     output: {
         path: __dirname + '/dist',
-        filename: 'app.js'
+        filename: 'app.js',
     },
     module: {
         rules: [
@@ -14,26 +14,30 @@ module.exports = {
                 use: [
                     'style-loader',
                     {
-                        loader: 'css-loader'
-                    }
-                ]
+                        loader: 'css-loader',
+                    },
+                ],
             },
             {
                 test: /\.(png|svg|jpg|gif)$/,
                 use: {
                     loader: 'url-loader',
                     options: {
-                        name: './dist/img/icon/[name].[ext]'
-                    }
-                }
-            }
-        ]
+                        name: './dist/img/icon/[name].[ext]',
+                    },
+                },
+            },
+        ],
     },
+    plugins: [
+        new webpack.ProvidePlugin({
+            maplibregl: 'maplibre-gl',
+        }),
+    ],
     devServer: {
         contentBase: __dirname + '/dist',
         publicPath: '/',
         watchContentBase: true,
-        open: true
-    }
+        open: true,
+    },
 };
-
