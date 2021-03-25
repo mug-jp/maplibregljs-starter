@@ -18,7 +18,7 @@
     "dependencies": {
         "css-loader": "^5.0.1",
         "file-loader": "^6.2.0",
-        "maplibre-gl": "1.13.0-rc.4",
+        "maplibre-gl": "^1.14.0",
         "style-loader": "^2.0.0",
         "url-loader": "^4.1.1"
     }
