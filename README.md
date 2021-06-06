@@ -4,9 +4,9 @@
 
 Start MapLibre GL JS easily.  
 - [MapLibre GL JS v1.14.0](https://github.com/maplibre/maplibre-gl-js) 
-- [webpack v5.11.1](https://webpack.js.org)  
-- node v15.5.0
-- npm v7.3.0
+- [webpack v5.38.1](https://webpack.js.org)  
+- node v16.3.0
+- npm v7.15.1
 
 <br>
 
@@ -65,9 +65,9 @@ Copyright (c) 2021 Yasunori Kirimoto
 
 MapLibre GL JSを手軽に始める
 - [MapLibre GL JS v1.14.0](https://github.com/maplibre/maplibre-gl-js) 
-- [webpack v5.11.1](https://webpack.js.org)  
-- node v15.5.0
-- npm v7.3.0
+- [webpack v5.38.1](https://webpack.js.org)  
+- node v16.3.0
+- npm v7.15.1
 
 <br>
 
