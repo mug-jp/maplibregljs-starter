@@ -1,6 +1,6 @@
 {
     "name": "maplibregljs-starter",
-    "version": "1.15.2",
+    "version": "2.0.0",
     "description": "",
     "main": "main.js",
     "scripts": {
@@ -18,7 +18,7 @@
     "dependencies": {
         "css-loader": "^5.2.6",
         "file-loader": "^6.2.0",
-        "maplibre-gl": "^1.15.2",
+        "maplibre-gl": "^2.0.0",
         "style-loader": "^2.0.0",
         "url-loader": "^4.1.1"
     }
