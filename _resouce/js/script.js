@@ -1,4 +1,3 @@
-// MIERUNE MONO読み込み
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -26,5 +25,4 @@ const map = new maplibregl.Map({
     zoom: 11,
 });
 
-// コントロール関係表示
 map.addControl(new maplibregl.NavigationControl());
