@@ -11,8 +11,8 @@
   "author": "Yasunori Kirimoto",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^4.8.2",
-    "vite": "^3.1.0"
+    "typescript": "^4.8.4",
+    "vite": "^3.2.1"
   },
   "dependencies": {
     "maplibre-gl": "^2.4.0"
