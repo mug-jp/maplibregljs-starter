@@ -1,6 +1,6 @@
 {
   "name": "maplibregljs-starter",
-  "version": "3.1.0",
+  "version": "3.3.1",
   "description": "",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,10 @@
   "author": "Yasunori Kirimoto",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^5.1.6",
-    "vite": "^4.4.1"
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9"
   },
   "dependencies": {
-    "maplibre-gl": "^3.1.0"
+    "maplibre-gl": "^3.3.1"
   }
 }
