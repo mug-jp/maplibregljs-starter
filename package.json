@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "keywords": [],
-  "author": "Yasunori Kirimoto",
+  "author": "MapLibre User Group Japan",
   "license": "ISC",
   "devDependencies": {
     "typescript": "^5.2.2",
