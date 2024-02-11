@@ -3,11 +3,11 @@
 ![README02](img/README02.png)
 
 Start MapLibre GL JS easily.  
-- [MapLibre GL JS v3.3.1](https://maplibre.org)  
-- [TypeScript v5.2.2](https://www.typescriptlang.org)  
-- [Vite v4.4.9](https://vitejs.dev)  
-- node v18.1.0
-- npm v8.19.2
+- [MapLibre GL JS v4.0.0](https://maplibre.org)  
+- [TypeScript v5.3.3](https://www.typescriptlang.org)  
+- [Vite v5.1.1](https://vitejs.dev)  
+- node v21.6.0
+- npm v10.2.4
 
 <br>
 
@@ -48,7 +48,7 @@ npm run dev
 ## License
 MIT
 
-Copyright (c) 2023 MapLibre User Group Japan
+Copyright (c) 2023-2024 MapLibre User Group Japan
 
 <br>
 
@@ -65,11 +65,11 @@ Copyright (c) 2023 MapLibre User Group Japan
 ![README02](img/README02.png)
 
 MapLibre GL JSを手軽に始める
-- [MapLibre GL JS v3.3.1](https://maplibre.org)  
-- [TypeScript v5.2.2](https://www.typescriptlang.org)  
-- [Vite v4.4.9](https://vitejs.dev)  
-- node v18.1.0
-- npm v8.19.2
+- [MapLibre GL JS v4.0.0](https://maplibre.org)  
+- [TypeScript v5.3.3](https://www.typescriptlang.org)  
+- [Vite v5.1.1](https://vitejs.dev)  
+- node v21.6.0
+- npm v10.2.4
 
 <br>
 
@@ -111,6 +111,6 @@ npm run dev
 ## ライセンス
 MIT
 
-Copyright (c) 2023 MapLibre User Group Japan
+Copyright (c) 2023-2024 MapLibre User Group Japan
 
 <br>
