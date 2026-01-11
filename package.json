@@ -1,6 +1,6 @@
 {
   "name": "maplibregljs-starter",
-  "version": "4.5.0",
+  "version": "5.15.0",
   "description": "",
   "scripts": {
     "dev": "vite",
@@ -9,12 +9,12 @@
   },
   "keywords": [],
   "author": "MapLibre User Group Japan",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.5.2",
-    "vite": "^5.3.2"
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   },
   "dependencies": {
-    "maplibre-gl": "^4.5.0"
+    "maplibre-gl": "^5.15.0"
   }
 }
