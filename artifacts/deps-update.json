@@ -1,16 +1,21 @@
 {
-  "changed": false,
+  "changed": true,
   "current": {
     "maplibre-gl": "5.15.0",
     "typescript": "5.9.3",
     "vite": "7.3.1"
   },
   "latest": {
-    "maplibre-gl": "5.15.0",
+    "maplibre-gl": "5.16.0",
     "typescript": "5.9.3",
     "vite": "7.3.1"
   },
+  "prev_version": "5.15.0",
+  "next_version": "5.16.0",
   "install_ok": true,
-  "build_ok": null,
-  "visual_ok": null
+  "versions_for_readme": {
+    "maplibre-gl": "5.16.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1"
+  }
 }
