@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:ghpages": "VITE_BASE=/maplibregljs-starter/ VITE_OUTDIR=docs npm run build",
     "preview": "vite preview"
   },
   "keywords": [],
   "author": "MapLibre User Group Japan",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^24.10.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   },
