@@ -1,0 +1,16 @@
+{
+  "changed": false,
+  "current": {
+    "maplibre-gl": "5.15.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1"
+  },
+  "latest": {
+    "maplibre-gl": "5.15.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.1"
+  },
+  "install_ok": true,
+  "build_ok": null,
+  "visual_ok": null
+}
