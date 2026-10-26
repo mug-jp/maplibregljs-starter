@@ -8,25 +8,103 @@ name: CI
 permissions:
   contents: read
 
+# One run per pull request; a superseded PR run is cancelled. Pushes to main
+# get a group of their own per run, so they never queue behind or cancel each
+# other — the Release workflow keys off every main run's conclusion, and a
+# pending run in a shared group would be replaced by the next push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing here pushes; keep the token out of .git/config while
+          # building and testing PR code.
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      # Installs the pnpm version pinned in package.json's packageManager
+      # field. Third-party action pinned to a commit SHA.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
-      - run: npm run build
+      - name: Test automation scripts
+        run: |
+          npm ci --prefix .github --ignore-scripts --no-audit --no-fund
+          node --test .github/scripts/verify-update.test.mjs \
+            .github/scripts/select-version.test.mjs \
+            .github/scripts/pages-target.test.mjs
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run format:check
+      - run: pnpm run build
 
       # E2E smoke (no snapshot baseline required)
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Smoke test
-        run: npx playwright test e2e/smoke.spec.ts
+        run: pnpm exec playwright test e2e/smoke.spec.ts
+
+      # Also on cancellation: a job stopped by timeout-minutes reports
+      # "cancelled", which failure() would miss.
+      - name: Upload Playwright report
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Nobody watches these two runs, so a failure must reach Slack: CI on main
+  # (blocks the Release workflow), and CI on the bot deps PR (the armed
+  # auto-merge then never fires and the PR quietly stays open). Kept in its
+  # own job with no secrets on the build runner: build-and-smoke executes
+  # freshly-updated third-party deps, and that runner must never hold the
+  # webhook. This job checks nothing out and installs nothing, so jq/curl
+  # come from the pristine image.
+  notify-failure:
+    needs: build-and-smoke
+    # always() + result check, not failure(): a job cancelled by its own
+    # timeout-minutes reports "cancelled", which failure() would miss.
+    if: >-
+      always() && needs.build-and-smoke.result != 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.head_ref == 'bot/deps-update'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Notify Slack (CI failed unattended)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CI_RESULT: ${{ needs.build-and-smoke.result }}
+          ON_MAIN: ${{ github.event_name == 'push' }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret is not set. Skipped notification."
+            exit 0
+          fi
+          project="${GITHUB_REPOSITORY#*/}" # owner/name -> name
+          if [ "$ON_MAIN" = "true" ]; then
+            text=":x: $project CI $CI_RESULT on main — the release is blocked until this is fixed. $RUN_URL"
+          else
+            text=":x: $project CI $CI_RESULT on the bot deps PR — auto-merge will not fire and the PR stays open: ${PR_URL:-$RUN_URL}"
+          fi
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sf -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL" ||
+            echo "::warning::Slack notification failed"
