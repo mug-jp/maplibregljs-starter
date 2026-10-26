@@ -1,14 +1,18 @@
 name: Dependency Auto Update
 
+# Daily dependency updates. See .github/AUTOMATION.md for behavior and GitHub App setup.
+# Keep secrets out of `update`, which executes new dependencies. Only
+# `publish` receives credentials and handles validated result files as data.
+
 "on":
   schedule:
     - cron: "0 21 * * *" # 6:00 JST
   workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+    inputs:
+      dry_run:
+        description: "Run all checks but skip PR creation"
+        type: boolean
+        default: false
 
 concurrency:
   group: deps-autoupdate
@@ -18,91 +22,95 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.update.outputs.changed }}
+      delta: ${{ steps.update.outputs.delta }}
+      next_version: ${{ steps.update.outputs.next_version }}
+      failed_groups: ${{ steps.update.outputs.failed_groups }}
+      failed_stage: ${{ steps.stage.outputs.failed_stage }}
+      base_sha: ${{ steps.base.outputs.sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Queued runs must start from the latest main.
+          ref: main
           fetch-depth: 0
+          # Keep the checkout token out of reach of dependency scripts.
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      # Publish rejects results if main has moved since this commit.
+      - name: Record base commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-          cache: npm
+          cache: pnpm
 
       - name: Install deps (base)
-        run: npm ci
+        id: install_base
+        run: pnpm install --frozen-lockfile
 
       - name: Build (base)
-        run: npm run build
+        id: build_base
+        run: pnpm run build
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        id: browsers
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Baseline screenshots from current main
-        run: npx playwright test e2e/visual.spec.ts --update-snapshots
+        id: baseline
+        run: pnpm exec playwright test e2e/visual.spec.ts --update-snapshots
 
-      - name: Check & update maplibre-gl/typescript/vite
-        id: deps
-        continue-on-error: true
+      # Save the baseline before the updated render overwrites it.
+      - name: Capture "before" comparison image
+        id: before_img
+        run: |
+          mkdir -p e2e/screenshots
+          cp .playwright-snapshots/visual.spec.ts-snapshots/map-root-linux.png e2e/screenshots/before.png
+
+      - name: Update dependencies
+        id: update
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/deps-check-and-update.mjs
 
-      - name: Detect changes
-        id: changes
+      - name: Capture "after" comparison image
+        id: after_img
+        if: steps.update.outputs.changed == 'true'
+        # Rollback restores dependencies but leaves dist/ from the failed build.
         run: |
-          if git diff --quiet; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
+          pnpm run build
+          pnpm exec playwright test e2e/visual.spec.ts --update-snapshots
+          mkdir -p e2e/screenshots
+          cp .playwright-snapshots/visual.spec.ts-snapshots/map-root-linux.png e2e/screenshots/after.png
 
-      - name: Stop if nothing changed
-        if: steps.changes.outputs.changed != 'true'
-        run: echo "No updates found. Done."
-
-      - name: Build (updated)
-        id: build_updated
-        if: steps.changes.outputs.changed == 'true'
-        continue-on-error: true
-        run: npm run build
-
-      - name: Visual regression (compare vs baseline)
-        id: visual
-        if: steps.changes.outputs.changed == 'true'
-        continue-on-error: true
-        run: npx playwright test e2e/visual.spec.ts
-
-      - name: Collect visual diff images
-        if: steps.changes.outputs.changed == 'true'
-        run: |
-          mkdir -p artifacts/visual-diff
-          # expected (baseline)
-          # Playwright stores the snapshot under a "*-snapshots" directory next to the test.
-          EXPECTED="$(find . -type f -path '*-snapshots/*' \
-            \( -name 'map.png' -o -name 'map-*.png' -o -name 'map*.png' \) 2>/dev/null | head -n 1 || true)"
-          if [ -z "$EXPECTED" ]; then
-            EXPECTED="$(find test-results -type f -name '*-expected.png' 2>/dev/null | head -n 1 || true)"
-          fi
-          if [ -n "$EXPECTED" ]; then
-            cp "$EXPECTED" artifacts/visual-diff/map-expected.png
-          fi
-
-          # actual/diff (created when visual test fails)
-          ACTUAL="$(find test-results -type f -name '*-actual.png' 2>/dev/null | head -n 1 || true)"
-          if [ -n "$ACTUAL" ]; then
-            cp "$ACTUAL" artifacts/visual-diff/map-actual.png
-          fi
-
-          DIFF="$(find test-results -type f -name '*-diff.png' 2>/dev/null | head -n 1 || true)"
-          if [ -n "$DIFF" ]; then
-            cp "$DIFF" artifacts/visual-diff/map-diff.png
-          fi
-
-          echo "Collected files:"
-          ls -la artifacts/visual-diff || true
+      # Transfer only the files publish is allowed to commit.
+      - name: Hand the result files to the publish job
+        if: steps.update.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deps-update-result
+          path: |
+            package.json
+            pnpm-lock.yaml
+            README.md
+            e2e/screenshots/before.png
+            e2e/screenshots/after.png
+            artifacts/pr-body.md
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload artifacts
-        if: steps.changes.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
+        if: ${{ always() && (failure() || steps.update.outputs.changed == 'true' || steps.update.outputs.failed_groups != '') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deps-update-artifacts
           path: |
@@ -111,101 +119,292 @@ jobs:
             playwright-report/
             .playwright-snapshots/
           if-no-files-found: ignore
+          retention-days: 14
+          # Include .playwright-snapshots in failure diagnostics.
+          include-hidden-files: true
 
-      - name: Compose PR body
-        id: prbody
-        if: steps.changes.outputs.changed == 'true'
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-          const jsonPath = path.join('artifacts','deps-update.json');
-          const p = fs.existsSync(jsonPath)
-            ? JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-            : { changed: true, install_ok: false, current: {}, latest: {} };
-          const lines = [];
-          lines.push('Automated dependency update (scheduled job).');
-          lines.push('');
-          lines.push('## Updated');
-          for (const k of ['maplibre-gl','typescript','vite']) {
-            if (p.current?.[k] && p.latest?.[k]) {
-              lines.push(`- ${k}: ${p.current[k]} → ${p.latest[k]}`);
-            }
-          }
-          lines.push('');
-          lines.push('## Project version');
-          if (p.prev_version && p.next_version) lines.push(`- ${p.prev_version} → ${p.next_version}`);
-          lines.push('');
-          lines.push('## Checks');
-          lines.push(`- npm install: ${p.install_ok ? 'OK' : 'FAILED'}`);
-          lines.push(`- build: ${process.env.BUILD_OUTCOME || 'unknown'}`);
-          lines.push(`- visual: ${process.env.VISUAL_OUTCOME || 'unknown'}`);
-          lines.push('');
-          // Visual diff images (committed into the PR branch)
-          const diffDir = path.join('artifacts','visual-diff');
-          const expected = path.join(diffDir,'map-expected.png');
-          const actual = path.join(diffDir,'map-actual.png');
-          const diff = path.join(diffDir,'map-diff.png');
-          const rel = (p) => p.split(path.sep).join('/');
-          const hasVisual = [expected, actual, diff].some((p) => fs.existsSync(p));
-          if (hasVisual) {
-            lines.push('## Visual diff');
-            if (fs.existsSync(expected)) { lines.push('### expected'); lines.push(`![](${rel(expected)})`); lines.push(''); }
-            if (fs.existsSync(actual))   { lines.push('### actual');   lines.push(`![](${rel(actual)})`);   lines.push(''); }
-            if (fs.existsSync(diff))     { lines.push('### diff');     lines.push(`![](${rel(diff)})`);     lines.push(''); }
-          }
-          lines.push('Artifacts (logs / reports / diffs) are attached to the workflow run.');
-
-          fs.writeFileSync('artifacts/pr-body.md', lines.join('\n') + '\n');
-          NODE
-          echo "body_path=artifacts/pr-body.md" >> $GITHUB_OUTPUT
+      # Pass the failing stage to publish for its Slack notification.
+      - name: Report the failing stage
+        id: stage
+        if: always()
         env:
-          BUILD_OUTCOME: ${{ steps.build_updated.outcome }}
-          VISUAL_OUTCOME: ${{ steps.visual.outcome }}
-
-
-      - name: Check PR token configuration
-        if: steps.changes.outputs.changed == 'true'
+          O_INSTALL_BASE: ${{ steps.install_base.outcome }}
+          O_BUILD_BASE: ${{ steps.build_base.outcome }}
+          O_BROWSERS: ${{ steps.browsers.outcome }}
+          O_BASELINE: ${{ steps.baseline.outcome }}
+          O_BEFORE_IMG: ${{ steps.before_img.outcome }}
+          O_UPDATE: ${{ steps.update.outcome }}
+          O_AFTER_IMG: ${{ steps.after_img.outcome }}
         run: |
-          if [ -z "$PR_TOKEN" ]; then
-            echo "::warning::PR_TOKEN is not set. If PR creation fails with 'GitHub Actions is not permitted to create or approve pull requests', either (1) enable repository setting 'Allow GitHub Actions to create and approve pull requests' or (2) set secrets.PR_TOKEN to a fine-grained PAT with Pull requests write."
+          stage=""
+          if   [ "$O_INSTALL_BASE" = "failure" ]; then stage="install-base"
+          elif [ "$O_BUILD_BASE"   = "failure" ]; then stage="build-base"
+          elif [ "$O_BROWSERS"     = "failure" ]; then stage="playwright-install"
+          elif [ "$O_BASELINE"     = "failure" ]; then stage="baseline"
+          elif [ "$O_BEFORE_IMG"   = "failure" ]; then stage="before-image"
+          elif [ "$O_UPDATE"       = "failure" ]; then stage="update"
+          elif [ "$O_AFTER_IMG"    = "failure" ]; then stage="after-image"
           fi
+          echo "failed_stage=$stage" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: update
+    # Report failures from the update job too.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write # keepalive re-enables this schedule via API
+    env:
+      # Step conditions cannot access secrets directly.
+      APP_CONFIGURED: ${{ vars.APP_CLIENT_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # Create Pull Request pushes with its own token input.
+          persist-credentials: false
+
+      # Reject stale results so they cannot overwrite changes made during update.
+      - name: Base commit unchanged
+        id: base_check
+        if: needs.update.outputs.changed == 'true'
         env:
-          PR_TOKEN: ${{ secrets.PR_TOKEN }}
-      - name: Restore workflows (avoid workflows permission)
-        if: steps.changes.outputs.changed == 'true'
+          BASE_SHA: ${{ needs.update.outputs.base_sha }}
         run: |
-          # Ensure no changes under .github/workflows are included in the PR branch.
-          git checkout -- .github/workflows || true
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+            echo "::error::main moved from $BASE_SHA to $HEAD_SHA during the update; skipping."
+            exit 1
+          fi
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.update.outputs.changed == 'true'
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
 
+      # Install only the validator's pinned tools from the trusted checkout.
+      - name: Install validator tools
+        if: needs.update.outputs.changed == 'true'
+        run: npm ci --prefix .github --ignore-scripts --no-audit --no-fund
+
+      - name: Fetch the result files
+        if: needs.update.outputs.changed == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: deps-update-result
+          path: incoming
+
+      # Validate untrusted artifacts using the verifier checked out from main.
+      - name: Verify the result files
+        id: verify
+        if: needs.update.outputs.changed == 'true'
+        run: node .github/scripts/verify-update.mjs incoming
+
+      # Copy only these paths, regardless of what else the artifact contains.
+      - name: Apply the result files
+        if: needs.update.outputs.changed == 'true'
+        run: |
+          cp incoming/package.json package.json
+          cp incoming/pnpm-lock.yaml pnpm-lock.yaml
+          cp incoming/README.md README.md
+          mkdir -p e2e/screenshots artifacts
+          cp incoming/e2e/screenshots/before.png e2e/screenshots/
+          cp incoming/e2e/screenshots/after.png e2e/screenshots/
+          cp incoming/artifacts/pr-body.md artifacts/
+          rm -rf incoming
+
+      # If token issuance fails, fall back to a PR for manual review.
+      - name: Issue the App token
+        id: app_token
+        if: >-
+          needs.update.outputs.changed == 'true' && inputs.dry_run != true &&
+          env.APP_CONFIGURED == 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Limit the token to the permissions this job needs.
+          permission-contents: write
+          permission-pull-requests: write
+
+      # Existing auto-merge survives PR updates. Disable it before publishing
+      # changes that need manual review; stop if lookup or disabling fails.
+      - name: Disarm a leftover auto-merge
+        id: disarm
+        if: >-
+          needs.update.outputs.changed == 'true' && inputs.dry_run != true &&
+          (needs.update.outputs.failed_groups != '' || steps.app_token.outcome != 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          armed_prs=$(
+            gh pr list \
+              --repo "$REPO" \
+              --head bot/deps-update \
+              --base main \
+              --state open \
+              --json url,autoMergeRequest \
+              --jq '
+                .[]
+                | select(.autoMergeRequest != null)
+                | "\(.url) \(.autoMergeRequest.enabledBy.login // "unknown")"
+              '
+          )
+
+          if [ -z "$armed_prs" ]; then
+            echo "No open bot PR with auto-merge armed; nothing to disarm."
+            exit 0
+          fi
+
+          while read -r url enabled_by; do
+            # Record the PR before disabling so Slack can link it on failure.
+            echo "pr_url=$url" >> "$GITHUB_OUTPUT"
+            echo "armed_by=$enabled_by" >> "$GITHUB_OUTPUT"
+
+            gh pr merge --disable-auto "$url"
+            echo "disarmed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Disarmed the auto-merge that $enabled_by had armed on $url; this run will not re-arm it."
+          done <<< "$armed_prs"
+
+      # Only publish knows whether App authentication succeeded.
+      - name: Finish the PR body
+        if: needs.update.outputs.changed == 'true' && inputs.dry_run != true
+        env:
+          O_APP_TOKEN: ${{ steps.app_token.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          notice='This run had no App token, so it used github.token, whose pushes leave CI runs waiting for approval: if the checks on this PR are pending approval, press "Approve workflows to run" in the merge box (or close and reopen the PR); then merge once CI passes.'
+          case "$O_APP_TOKEN" in
+            success)
+              note="All checks passed, so the update workflow arms auto-merge — GitHub merges this PR as soon as CI passes on it."
+              notice=""
+              ;;
+            failure)
+              note="All checks passed, but auto-merge is NOT armed: the App token could not be issued (see the 'Issue the App token' step: $RUN_URL)."
+              ;;
+            *)
+              note="All checks passed, but auto-merge is NOT armed: the deps-update GitHub App is not configured (setup: .github/AUTOMATION.md)."
+              ;;
+          esac
+          node -e '
+            const fs = require("node:fs");
+            const [note, notice] = process.argv.slice(1);
+            const file = "artifacts/pr-body.md";
+            let body = fs.readFileSync(file, "utf8").replaceAll("{{AUTO_MERGE_NOTE}}", () => note);
+            if (notice) body += `\n${notice}\n`;
+            fs.writeFileSync(file, body);
+          ' "$note" "$notice"
 
       - name: Create Pull Request
         id: cpr
-        if: steps.changes.outputs.changed == 'true'
-        continue-on-error: true
-        uses: peter-evans/create-pull-request@v6
+        if: needs.update.outputs.changed == 'true' && inputs.dry_run != true
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          # If the repository setting "Allow GitHub Actions to create and approve pull requests" is disabled,
-          # the default GITHUB_TOKEN cannot open a PR. In that case, provide a fine-grained PAT as PR_TOKEN.
-          token: ${{ secrets.PR_TOKEN || github.token }}
+          # Without an App token, leave CI approval and merging to a human.
+          token: ${{ steps.app_token.outputs.token || github.token }}
           branch: bot/deps-update
           delete-branch: true
-          title: "chore: bump deps (maplibre-gl/typescript/vite)"
-          commit-message: "chore: bump deps (maplibre-gl/typescript/vite)"
+          title: "chore: bump deps to v${{ needs.update.outputs.next_version }} (${{ needs.update.outputs.delta }})"
+          commit-message: "chore: bump deps to v${{ needs.update.outputs.next_version }} (${{ needs.update.outputs.delta }})"
           body-path: artifacts/pr-body.md
           labels: dependencies
           add-paths: |
             package.json
-            package-lock.json
+            pnpm-lock.yaml
             README.md
-            artifacts/deps-update.json
-            artifacts/pr-body.md
-            artifacts/visual-diff/**
+            e2e/screenshots/before.png
+            e2e/screenshots/after.png
 
-
-      - name: Fail if PR was not created
-        if: steps.changes.outputs.changed == 'true' && (steps.cpr.outcome != 'success' || steps.cpr.outputs.pull-request-number == '')
+      # SHA URLs keep images visible after branch deletion. On failure,
+      # the original URLs still work while the PR branch exists.
+      - name: Point PR-body images at the commit SHA
+        if: steps.cpr.outputs.pull-request-url != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token || github.token }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+          HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
         run: |
-          echo "::error::Failed to create a pull request. Enable repository setting 'Allow GitHub Actions to create and approve pull requests' OR set secrets.PR_TOKEN (fine-grained PAT with Pull requests write)."
+          sed "s#/bot/deps-update/#/$HEAD_SHA/#g" artifacts/pr-body.md > pr-body-final.md
+          gh pr edit "$PR_URL" --body-file pr-body-final.md
+
+      # Use the App token so merging triggers CI and the release.
+      # Never fall back to a direct merge: the PR must pass required CI first.
+      - name: Auto-merge PR
+        id: automerge
+        if: >-
+          steps.cpr.outputs.pull-request-url != '' &&
+          needs.update.outputs.failed_groups == ''
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "skipped=no-token" >> "$GITHUB_OUTPUT"
+            echo "::warning::No App token (see the 'Issue the App token' step); auto-merge skipped. Approve the PR's workflows to run CI, then merge: $PR_URL"
+            exit 0
+          fi
+          # Keep this assignment separate so a failed lookup stops the step.
+          armed=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$armed" = "true" ]; then
+            echo "Auto-merge is already armed on $PR_URL; leaving it."
+          else
+            gh pr merge "$PR_URL" --auto --merge
+          fi
+          echo "armed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CHANGED: ${{ needs.update.outputs.changed }}
+          DELTA: ${{ needs.update.outputs.delta }}
+          NEXT_VERSION: ${{ needs.update.outputs.next_version }}
+          FAILED_GROUPS: ${{ needs.update.outputs.failed_groups }}
+          FAILED_STAGE: ${{ needs.update.outputs.failed_stage }}
+          UPDATE_RESULT: ${{ needs.update.result }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          O_BASE_CHECK: ${{ steps.base_check.outcome }}
+          O_VERIFY: ${{ steps.verify.outcome }}
+          O_APP_TOKEN: ${{ steps.app_token.outcome }}
+          O_DISARM: ${{ steps.disarm.outcome }}
+          DISARM_PR_URL: ${{ steps.disarm.outputs.pr_url }}
+          DISARMED: ${{ steps.disarm.outputs.disarmed }}
+          DISARM_ARMED_BY: ${{ steps.disarm.outputs.armed_by }}
+          O_CPR: ${{ steps.cpr.outcome }}
+          PR_OPERATION: ${{ steps.cpr.outputs.pull-request-operation }} # created / updated = this run pushed
+          O_AUTOMERGE: ${{ steps.automerge.outcome }}
+          ARMED: ${{ steps.automerge.outputs.armed }}
+          MERGE_SKIPPED: ${{ steps.automerge.outputs.skipped }}
+          # Include failures from steps without a dedicated outcome above.
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/notify-slack.sh
+
+      - name: Fail run if some groups were excluded
+        if: needs.update.outputs.failed_groups != ''
+        env:
+          FAILED_GROUPS: ${{ needs.update.outputs.failed_groups }}
+        run: |
+          echo "::error::Dependency groups failed checks: $FAILED_GROUPS"
           exit 1
+
+      # GitHub disables cron workflows after 60 days without repo activity;
+      # re-enabling this workflow via the Actions API resets that timer.
+      - name: Keepalive
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PUT \
+            "repos/${{ github.repository }}/actions/workflows/deps-autoupdate.yml/enable" \
+            || echo "::warning::Keepalive failed; the schedule may be disabled after 60 idle days"

@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Env files — real values never get committed; the example may
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,3 +32,9 @@ dist-ssr
 playwright-report/
 test-results/
 .playwright-snapshots/
+
+# Subpath build for the Playwright "subpath" project
+dist-subpath/
+
+# Workflow outputs (uploaded as run artifacts, never committed)
+artifacts/

@@ -3,11 +3,11 @@
 ![README02](img/README02.png)
 
 Start MapLibre GL JS easily.  
-- [MapLibre GL JS v5.16.0](https://maplibre.org)  
-- [TypeScript v5.9.3](https://www.typescriptlang.org)  
-- [Vite v7.3.1](https://vitejs.dev)  
-- node v24.4.1
-- npm v11.4.2
+- [MapLibre GL JS v6.13.0](https://maplibre.org)  
+- [TypeScript v7.0.2](https://www.typescriptlang.org)  
+- [Vite v8.3.4](https://vitejs.dev)  
+- node v24.21.0
+- pnpm v11.9.0
 
 <br>
 
@@ -18,25 +18,24 @@ Start MapLibre GL JS easily.
 <br>
 
 Install package
+
 ```bash
-npm install
+pnpm install --frozen-lockfile
 ```
 
 <br>
 
 build
 ```bash
-npm run build
+pnpm run build
 ```
 
 <br>
 
 dev
 ```bash
-npm run dev
+pnpm run dev
 ```
-
----
 
 <br>
 <br>
@@ -65,11 +64,11 @@ Copyright (c) 2023-2026 MapLibre User Group Japan
 ![README02](img/README02.png)
 
 MapLibre GL JSを手軽に始める
-- [MapLibre GL JS v5.16.0](https://maplibre.org)  
-- [TypeScript v5.9.3](https://www.typescriptlang.org)  
-- [Vite v7.3.1](https://vitejs.dev)  
-- node v24.4.1
-- npm v11.4.2
+- [MapLibre GL JS v6.13.0](https://maplibre.org)  
+- [TypeScript v7.0.2](https://www.typescriptlang.org)  
+- [Vite v8.3.4](https://vitejs.dev)  
+- node v24.21.0
+- pnpm v11.9.0
 
 <br>
 
@@ -82,7 +81,7 @@ MapLibre GL JSを手軽に始める
 パッケージインストール
 
 ```bash
-npm install
+pnpm install --frozen-lockfile
 ```
 
 <br>
@@ -90,7 +89,7 @@ npm install
 ビルド
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 <br>
@@ -98,7 +97,7 @@ npm run build
 開発
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 <br>
