@@ -1,6 +1,6 @@
 {
   "name": "maplibregljs-starter",
-  "version": "6.15.0",
+  "version": "6.15.0.1",
   "private": true,
   "description": "",
   "scripts": {
@@ -22,7 +22,7 @@
     "@types/node": "^24.19.2",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   },
   "dependencies": {
     "maplibre-gl": "^6.15.0"
